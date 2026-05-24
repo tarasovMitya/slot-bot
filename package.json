@@ -1,0 +1,17 @@
+{
+  "name": "slot-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types index.ts",
+    "dev": "node --watch --experimental-strip-types index.ts",
+    "post": "node --experimental-strip-types post.ts"
+  },
+  "dependencies": {
+    "grammy": "^1.31.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

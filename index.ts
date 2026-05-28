@@ -347,9 +347,9 @@ async function startBot() {
           }
         }
 
-        // Notify admin
+        // Notify admin (plain text to avoid Markdown issues with URLs)
         const summary = Object.entries(results).map(([k, v]) => `${k}: ${v}`).join("\n");
-        await bot.api.sendMessage(865826947, `📢 *Опубликовано агентом*\n\n*${content.title || "Пост"}*\n\n${summary}`, { parse_mode: "Markdown" });
+        await bot.api.sendMessage(865826947, `📢 Опубликовано агентом\n\n${content.title || "Пост"}\n\n${summary}`);
 
         res.writeHead(200).end(JSON.stringify({ ok: true, results }));
       } catch (e: unknown) {

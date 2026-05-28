@@ -1,5 +1,6 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { createHmac } from "node:crypto";
+import { createServer } from "node:http";
 
 const BOT_TOKEN = process.env.BOT_TOKEN!;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID!;
@@ -74,7 +75,8 @@ async function storeAuthSession(
 // ─── /start ───────────────────────────────────────────────────────────────────
 
 bot.command("start", async (ctx) => {
-  const payload = ctx.match; // everything after /start
+  const payload = ctx.match;
+  const isGroup = ctx.chat.type === "group" || ctx.chat.type === "supergroup";
 
   // Bot-based Telegram login flow
   if (payload?.startsWith("LOGIN_")) {
@@ -91,14 +93,17 @@ bot.command("start", async (ctx) => {
       );
     } catch (e) {
       console.error("Auth session error:", e);
-      await ctx.reply(
-        "❌ Не удалось выполнить вход. Вернитесь на сайт и попробуйте снова."
-      );
+      await ctx.reply("❌ Не удалось выполнить вход. Вернитесь на сайт и попробуйте снова.");
     }
     return;
   }
 
   const name = ctx.from?.first_name ?? "друг";
+
+  if (isGroup) {
+    await ctx.reply(`👋 Привет! Напишите мне в личку: @slot_home_bot`);
+    return;
+  }
 
   await ctx.reply(
     `👋 Привет, ${name}!\n\n` +
@@ -246,10 +251,126 @@ bot.command("help", async (ctx) => {
 
 // ─── Старт ────────────────────────────────────────────────────────────────────
 
-bot.start({
-  onStart: async () => {
-    console.log("✅ SLOT bot started. Posting every 3 days.");
-    await setupBot();
+const PORT = Number(process.env.PORT) || 3000;
+const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || "https://slot-telegram-bot-production.up.railway.app";
+
+async function startBot() {
+  await bot.api.setWebhook(`${WEBHOOK_DOMAIN}/bot`);
+  console.log(`✅ Webhook set: ${WEBHOOK_DOMAIN}/bot`);
+
+  const PUBLISH_SECRET = process.env.PUBLISH_SECRET || "slot-publish-secret";
+  const VK_TOKEN = process.env.VK_TOKEN || "";
+  const VC_REFRESH_TOKEN = process.env.VC_REFRESH_TOKEN || "";
+  const VK_OWNER_ID = -239140857;
+
+  const handler = webhookCallback(bot, "http");
+  const server = createServer(async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Type", "application/json");
+
+    // ── /api/publish — публикация контента агентом ────────────────────────────
+    if (req.method === "POST" && req.url === "/api/publish") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      await new Promise((r) => req.on("end", r));
+
+      try {
+        const { secret, type, content } = JSON.parse(body) as {
+          secret: string;
+          type: "vk" | "vcru" | "telegram" | "all";
+          content: { title?: string; text: string; html?: string };
+        };
+
+        if (secret !== PUBLISH_SECRET) {
+          res.writeHead(401).end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+
+        const results: Record<string, string> = {};
+
+        // VK
+        if ((type === "vk" || type === "all") && VK_TOKEN) {
+          const vkRes = await fetch("https://api.vk.com/method/wall.post", {
+            method: "POST",
+            body: new URLSearchParams({
+              owner_id: String(VK_OWNER_ID),
+              from_group: "1",
+              message: content.text,
+              access_token: VK_TOKEN,
+              v: "5.199",
+            }),
+          });
+          const vkData = await vkRes.json() as { response?: { post_id: number } };
+          if (vkData.response?.post_id) {
+            results.vk = `https://vk.com/wall${VK_OWNER_ID}_${vkData.response.post_id}`;
+          }
+        }
+
+        // Telegram channel
+        if (type === "telegram" || type === "all") {
+          await bot.api.sendMessage(Number(CHANNEL_ID) || -1003795683781, content.text);
+          results.telegram = "sent";
+        }
+
+        // vc.ru (needs fresh access token)
+        if ((type === "vcru" || type === "all") && VC_REFRESH_TOKEN && content.title) {
+          const tokenRes = await fetch("https://api.vc.ru/v3.4/auth/refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `token=${VC_REFRESH_TOKEN}`,
+          });
+          const tokenData = await tokenRes.json() as { data?: { accessToken: string } };
+          const accessToken = tokenData.data?.accessToken;
+
+          if (accessToken) {
+            const entryObj = {
+              subsite_id: 5980245,
+              title: content.title,
+              entry: { blocks: [{ type: "text", cover: false, hidden: false, anchor: "", data: { text: content.html || content.text } }] },
+            };
+            const entryBody = new URLSearchParams();
+            entryBody.append("entry", JSON.stringify(entryObj));
+            const createRes = await fetch("https://api.vc.ru/v2.8/editor", {
+              method: "POST",
+              headers: { "JWTAuthorization": `Bearer ${accessToken}`, "Content-Type": "application/x-www-form-urlencoded" },
+              body: entryBody.toString(),
+            });
+            const createData = await createRes.json() as { result?: { entry: { id: number; url: string } } };
+            const entryId = createData.result?.entry?.id;
+            if (entryId) {
+              await fetch(`https://api.vc.ru/v2.8/editor/${entryId}/publish`, {
+                method: "POST",
+                headers: { "JWTAuthorization": `Bearer ${accessToken}` },
+              });
+              results.vcru = createData.result!.entry.url;
+            }
+          }
+        }
+
+        // Notify admin
+        const summary = Object.entries(results).map(([k, v]) => `${k}: ${v}`).join("\n");
+        await bot.api.sendMessage(865826947, `📢 *Опубликовано агентом*\n\n*${content.title || "Пост"}*\n\n${summary}`, { parse_mode: "Markdown" });
+
+        res.writeHead(200).end(JSON.stringify({ ok: true, results }));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        res.writeHead(500).end(JSON.stringify({ error: msg }));
+      }
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/bot") {
+      await handler(req, res);
+    } else {
+      res.writeHead(200).end("OK");
+    }
+  });
+
+  server.listen(PORT, () => {
+    console.log(`✅ SLOT bot started. Listening on port ${PORT}`);
+    setupBot();
     schedulePosting();
-  },
-});
+  });
+}
+
+startBot();

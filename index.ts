@@ -308,8 +308,13 @@ async function startBot() {
 
         // Telegram channel
         if (type === "telegram" || type === "all") {
-          await bot.api.sendMessage(Number(CHANNEL_ID) || -1003795683781, content.text);
-          results.telegram = "sent";
+          try {
+            const chanId = Number(CHANNEL_ID) || -1003795683781;
+            await bot.api.sendMessage(chanId, content.text);
+            results.telegram = "sent";
+          } catch (tgErr: unknown) {
+            results.telegram_error = tgErr instanceof Error ? tgErr.message : String(tgErr);
+          }
         }
 
         // vc.ru (needs fresh access token)

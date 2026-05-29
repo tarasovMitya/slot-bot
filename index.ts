@@ -1,6 +1,9 @@
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const BOT_TOKEN = process.env.BOT_TOKEN!;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID!;
@@ -249,6 +252,113 @@ bot.command("help", async (ctx) => {
   );
 });
 
+// ─── Ежедневная публикация статей (10:00 МСК = 07:00 UTC) ────────────────────
+
+const SITE_URL = "https://slot-home.ru";
+const VK_TOKEN_ENV = process.env.VK_TOKEN || "";
+const VK_OWNER = -239140857;
+
+const CAT_EMOJI: Record<string, string> = {
+  "Электрика": "⚡", "Сантехника": "💧", "Уборка": "🧹", "Химчистка": "🧴",
+  "Сборка мебели": "🛋", "Муж на час": "🔨", "Установка ТВ": "📺",
+  "Установка дверей": "🚪", "Ремонт": "🏗", "Кондиционеры": "❄️",
+  "Советы": "💡", "Истории клиентов": "📖",
+};
+
+interface BlogSection { type: string; text?: string; items?: string[]; rows?: Array<{ label: string; value: string }>; }
+interface BlogArticle { slug: string; title: string; category: string; categorySlug: string; publishedAt: string; sections: BlogSection[]; }
+
+function loadArticles(): BlogArticle[] {
+  try {
+    const __dir = dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(join(__dir, "articles.json"), "utf-8"));
+  } catch { return []; }
+}
+
+function buildPostContent(a: BlogArticle) {
+  let intro = "", bullets: string[] = [], prices: Array<{ label: string; value: string }> = [], tip = "";
+  for (const s of a.sections) {
+    if (s.type === "p" && !intro && s.text) intro = s.text;
+    else if ((s.type === "ul" || s.type === "ol") && !bullets.length && s.items) bullets = s.items.slice(0, 5);
+    else if (s.type === "table" && !prices.length && s.rows) prices = s.rows.slice(0, 4);
+    else if (s.type === "tip" && !tip && s.text) tip = s.text;
+  }
+  return { intro, bullets, prices, tip };
+}
+
+async function dailyPostArticles(dateStr: string) {
+  const articles = loadArticles();
+  const toPost = articles.filter(a => a.publishedAt === dateStr).slice(0, 3);
+  if (!toPost.length) { console.log(`[daily] No articles for ${dateStr}`); return; }
+
+  console.log(`[daily] Posting ${toPost.length} articles for ${dateStr}`);
+  const chanId = Number(CHANNEL_ID) || -1003795683781;
+
+  for (const a of toPost) {
+    const em = CAT_EMOJI[a.category] || "📌";
+    const url = `${SITE_URL}/blog/${a.slug}`;
+    const { intro, bullets, prices, tip } = buildPostContent(a);
+
+    // Telegram (HTML)
+    try {
+      let tg = `${em} <b>${a.title}</b>\n\n`;
+      if (intro) tg += `${intro}\n\n`;
+      if (bullets.length) { tg += `<b>Ключевые моменты:</b>\n`; bullets.forEach(b => tg += `• ${b}\n`); tg += "\n"; }
+      if (prices.length) { tg += `<b>Цены в Москве 2026:</b>\n`; prices.forEach(p => tg += `• ${p.label}: ${p.value}\n`); tg += "\n"; }
+      if (tip) tg += `💡 <i>${tip}</i>\n\n`;
+      tg += `📖 <a href="${url}">Читать полностью</a>`;
+      await bot.api.sendMessage(chanId, tg, { parse_mode: "HTML", link_preview_options: { is_disabled: false } });
+      console.log(`  ✅ Telegram: ${a.title}`);
+    } catch (e) { console.error(`  ❌ Telegram: ${e}`); }
+
+    await new Promise(r => setTimeout(r, 3000));
+
+    // VK (plain text, long format)
+    if (VK_TOKEN_ENV) {
+      try {
+        let vk = `${em} ${a.title}\n\n`;
+        if (intro) vk += `${intro}\n\n`;
+        if (bullets.length) { vk += `📌 Ключевые моменты:\n`; bullets.forEach(b => vk += `• ${b}\n`); vk += "\n"; }
+        if (prices.length) { vk += `💰 Цены в Москве 2026:\n`; prices.forEach(p => vk += `• ${p.label}: ${p.value}\n`); vk += "\n"; }
+        if (tip) vk += `💡 ${tip}\n\n`;
+        vk += `📖 Читать полностью: ${url}\n\n`;
+        const tag = a.categorySlug || a.category.toLowerCase().replace(/\s+/g, "_");
+        vk += `#${tag} #слот_хоум #москва #мастер_на_дом`;
+        const vkBody = new URLSearchParams({ owner_id: String(VK_OWNER), from_group: "1", message: vk, access_token: VK_TOKEN_ENV, v: "5.199" });
+        const vkRes = await fetch("https://api.vk.com/method/wall.post", { method: "POST", body: vkBody });
+        const vkData = await vkRes.json() as { response?: { post_id: number }; error?: { error_msg: string } };
+        if (vkData.response?.post_id) console.log(`  ✅ VK post_id=${vkData.response.post_id}`);
+        else console.error(`  ❌ VK: ${vkData.error?.error_msg}`);
+      } catch (e) { console.error(`  ❌ VK: ${e}`); }
+    }
+
+    await new Promise(r => setTimeout(r, 8000));
+  }
+  console.log(`[daily] Done for ${dateStr}`);
+}
+
+function scheduleDailyBlogPosts() {
+  function getNextPostTime(): number {
+    const now = new Date();
+    // 07:00 UTC = 10:00 Moscow
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 7, 0, 0, 0));
+    if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1);
+    return next.getTime() - now.getTime();
+  }
+
+  function scheduleNext() {
+    const delay = getNextPostTime();
+    console.log(`[daily] Next blog post in ${Math.round(delay / 60000)} min`);
+    setTimeout(async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      await dailyPostArticles(today);
+      scheduleNext();
+    }, delay);
+  }
+
+  scheduleNext();
+}
+
 // ─── Старт ────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -278,7 +388,7 @@ async function startBot() {
         const { secret, type, content } = JSON.parse(body) as {
           secret: string;
           type: "vk" | "vcru" | "telegram" | "all";
-          content: { title?: string; text: string; html?: string };
+          content: { title?: string; text: string; html?: string; imageUrl?: string; articleUrl?: string };
         };
 
         if (secret !== PUBLISH_SECRET) {
@@ -288,50 +398,114 @@ async function startBot() {
 
         const results: Record<string, string> = {};
 
-        // VK
+        // Generate image via Pollinations if not provided
+        const imageUrl = content.imageUrl || (() => {
+          const prompt = encodeURIComponent(
+            `${content.title || content.text.slice(0, 80)}. Home services Moscow apartment. Clean minimalist photo. No text. No faces.`
+          );
+          return `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=630&model=flux&nologo=true`;
+        })();
+
+        // VK — post with image + link to slot-home.ru (no Telegraph)
         if ((type === "vk" || type === "all") && VK_TOKEN) {
-          const vkRes = await fetch("https://api.vk.com/method/wall.post", {
-            method: "POST",
-            body: new URLSearchParams({
-              owner_id: String(VK_OWNER_ID),
-              from_group: "1",
-              message: content.text,
-              access_token: VK_TOKEN,
-              v: "5.199",
-            }),
-          });
-          const vkData = await vkRes.json() as { response?: { post_id: number } };
-          if (vkData.response?.post_id) {
-            results.vk = `https://vk.com/wall${VK_OWNER_ID}_${vkData.response.post_id}`;
+          try {
+            // Step 1: get upload server
+            const uploadServerRes = await fetch(
+              `https://api.vk.com/method/photos.getWallUploadServer?group_id=239140857&access_token=${VK_TOKEN}&v=5.199`
+            );
+            const uploadServer = await uploadServerRes.json() as { response?: { upload_url: string } };
+            const uploadUrl = uploadServer.response?.upload_url;
+
+            let attachments = "";
+            if (uploadUrl) {
+              // Step 2: upload image
+              const imgRes = await fetch(imageUrl);
+              const imgBlob = await imgRes.blob();
+              const form = new FormData();
+              form.append("photo", imgBlob, "image.jpg");
+              const uploadRes = await fetch(uploadUrl, { method: "POST", body: form });
+              const uploaded = await uploadRes.json() as { server: number; photo: string; hash: string };
+              // Step 3: save photo
+              const saveParams = new URLSearchParams({
+                group_id: "239140857", server: String(uploaded.server),
+                photo: uploaded.photo, hash: uploaded.hash,
+                access_token: VK_TOKEN, v: "5.199",
+              });
+              const saveRes = await fetch("https://api.vk.com/method/photos.saveWallPhoto", { method: "POST", body: saveParams });
+              const saved = await saveRes.json() as { response?: Array<{ owner_id: number; id: number }> };
+              const photo = saved.response?.[0];
+              if (photo) attachments = `photo${photo.owner_id}_${photo.id}`;
+            }
+
+            // Add article link to post text (no Telegraph)
+            const vkText = content.articleUrl
+              ? `${content.text}\n\n📖 Читать полностью: ${content.articleUrl}`
+              : content.text;
+
+            const vkParams: Record<string, string> = {
+              owner_id: String(VK_OWNER_ID), from_group: "1",
+              message: vkText, access_token: VK_TOKEN, v: "5.199",
+            };
+            if (attachments) vkParams.attachments = attachments;
+
+            const vkRes = await fetch("https://api.vk.com/method/wall.post", {
+              method: "POST", body: new URLSearchParams(vkParams),
+            });
+            const vkData = await vkRes.json() as { response?: { post_id: number }; error?: { error_msg: string } };
+            if (vkData.response?.post_id) {
+              results.vk = `https://vk.com/wall${VK_OWNER_ID}_${vkData.response.post_id}`;
+            } else if (vkData.error) {
+              results.vk_error = vkData.error.error_msg;
+            }
+          } catch (vkErr: unknown) {
+            results.vk_error = vkErr instanceof Error ? vkErr.message : String(vkErr);
           }
         }
 
-        // Telegram channel
+        // Telegram channel — send with image
         if (type === "telegram" || type === "all") {
           try {
             const chanId = Number(CHANNEL_ID) || -1003795683781;
-            await bot.api.sendMessage(chanId, content.text);
+            const caption = content.articleUrl
+              ? `${content.text}\n\n👉 ${content.articleUrl}`
+              : content.text;
+            // Try sendPhoto first, fall back to sendMessage
+            try {
+              await bot.api.sendPhoto(chanId, imageUrl, { caption, parse_mode: "HTML" });
+            } catch {
+              await bot.api.sendMessage(chanId, caption, { parse_mode: "HTML" });
+            }
             results.telegram = "sent";
           } catch (tgErr: unknown) {
             results.telegram_error = tgErr instanceof Error ? tgErr.message : String(tgErr);
           }
         }
 
-        // vc.ru (needs fresh access token)
+        // vc.ru — refresh token rotates, save the new one
         if ((type === "vcru" || type === "all") && VC_REFRESH_TOKEN && content.title) {
           const tokenRes = await fetch("https://api.vc.ru/v3.4/auth/refresh", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: `token=${VC_REFRESH_TOKEN}`,
           });
-          const tokenData = await tokenRes.json() as { data?: { accessToken: string } };
+          const tokenData = await tokenRes.json() as { data?: { accessToken: string; refreshToken?: string } };
           const accessToken = tokenData.data?.accessToken;
+          // Rotate refresh token in memory for next call
+          if (tokenData.data?.refreshToken) {
+            // Note: update Railway env var separately — refresh token rotates every call
+            console.log("vc.ru new refreshToken:", tokenData.data.refreshToken);
+          }
 
           if (accessToken) {
+            const articleLink = content.articleUrl || "";
+            const htmlContent = content.html
+              ? content.html + (articleLink ? `<p>Источник: <a href="${articleLink}">${articleLink}</a></p>` : "")
+              : content.text + (articleLink ? `\n\nИсточник: ${articleLink}` : "");
+
             const entryObj = {
               subsite_id: 5980245,
               title: content.title,
-              entry: { blocks: [{ type: "text", cover: false, hidden: false, anchor: "", data: { text: content.html || content.text } }] },
+              entry: { blocks: [{ type: "text", cover: false, hidden: false, anchor: "", data: { text: htmlContent } }] },
             };
             const entryBody = new URLSearchParams();
             entryBody.append("entry", JSON.stringify(entryObj));
@@ -375,6 +549,7 @@ async function startBot() {
     console.log(`✅ SLOT bot started. Listening on port ${PORT}`);
     setupBot();
     schedulePosting();
+    scheduleDailyBlogPosts();
   });
 }
 

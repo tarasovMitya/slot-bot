@@ -122,13 +122,13 @@ export async function startGscAgent() {
 
   startPolling(TOKEN, async (msg: TgMessage) => {
     const text = msg.text ?? "";
-    if (!text.includes("@seo_gsc_bot")) return;
+    if (!text.includes("@slot_gsc_bot")) return;
 
     const taskId = text.match(/TASK_ID:(\S+)/)?.[1] ?? `T${Date.now()}`;
     const action = text.match(/ACTION:(\w+)/)?.[1] ?? "";
 
     const instruction = text
-      .replace(/@seo_gsc_bot\s*/i, "")
+      .replace(/@slot_gsc_bot\s*/i, "")
       .replace(/TASK_ID:\S+\s*/i, "")
       .replace(/ACTION:\w+\s*/i, "")
       .trim();

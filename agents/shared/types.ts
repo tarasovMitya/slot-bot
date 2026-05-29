@@ -45,12 +45,13 @@ export interface SectionBlock {
   caption?: string;
 }
 
+// Usernames as registered in @BotFather — update when new bots are created
 export const AGENT_MENTIONS: Record<AgentName, string> = {
-  conductor: "@seo_conductor_bot",
-  copywriter: "@seo_copywriter_bot",
-  searcher: "@seo_searcher_bot",
-  analyst: "@seo_analyst_bot",
-  "seo-optimizer": "@seo_optimizer_bot",
-  distribution: "@seo_dist_bot",
-  "gsc-agent": "@seo_gsc_bot",
+  conductor: "@slot_conductor_bot",
+  copywriter: "@slot_copywriter_bot",
+  searcher: "@slot_searcher_bot",
+  analyst: "@slot_analyst_bot",
+  "seo-optimizer": "@slot_seo_optimizer_bot",
+  distribution: "@slot_dist_bot",
+  "gsc-agent": "@slot_gsc_bot",
 };

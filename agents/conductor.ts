@@ -79,7 +79,7 @@ async function sendMorningReport(state: ConductorState) {
 
 async function requestArticle(topic: typeof TOPIC_POOL[0]) {
   const taskId = `T${Date.now()}`;
-  const msg = `@seo_copywriter_bot TASK_ID:${taskId} ACTION:write
+  const msg = `@slot_copywriter_bot TASK_ID:${taskId} ACTION:write
 Тема: ${topic.title}
 Ключ: ${topic.keyword}
 Категория: ${topic.category}
@@ -105,7 +105,7 @@ async function handleApproval(msg: TgMessage, state: ConductorState) {
     // Send publish task
     const taskId = `P${Date.now()}`;
     await sendMessage(TOKEN, GROUP_ID,
-      `@seo_dist_bot TASK_ID:${taskId} ACTION:publish\n${pending.json}`);
+      `@slot_dist_bot TASK_ID:${taskId} ACTION:publish\n${pending.json}`);
     state.pendingApprovals = state.pendingApprovals.filter(p => p.slug !== slug);
     state.articlesThisMonth++;
     state.budgetUsed += 0.05;
@@ -123,15 +123,15 @@ async function handleApproval(msg: TgMessage, state: ConductorState) {
     if (pending) {
       const taskId = `E${Date.now()}`;
       await sendMessage(TOKEN, GROUP_ID,
-        `@seo_copywriter_bot TASK_ID:${taskId} ACTION:edit\nSlug: ${slug}\nПравки: ${feedback}\n${pending.json}`);
+        `@slot_copywriter_bot TASK_ID:${taskId} ACTION:edit\nSlug: ${slug}\nПравки: ${feedback}\n${pending.json}`);
     }
   }
 }
 
 async function handleCommand(text: string, chatId: number, state: ConductorState) {
-  if (text === "/report" || text === "/report@seo_conductor_bot") {
+  if (text === "/report" || text === "/report@slot_conductor_bot") {
     await sendMorningReport(state);
-  } else if (text === "/status" || text === "/status@seo_conductor_bot") {
+  } else if (text === "/status" || text === "/status@slot_conductor_bot") {
     const topic = getNextTopic();
     await sendMessage(TOKEN, chatId,
       `🤖 SEO OS Status\n\n` +
@@ -139,12 +139,12 @@ async function handleCommand(text: string, chatId: number, state: ConductorState
       `Статей в очереди: ${state.pendingApprovals.length}\n` +
       `Следующая тема: ${topic?.title ?? "пул пуст"}\n` +
       `Бюджет: $${state.budgetUsed.toFixed(2)} / $5.00`);
-  } else if (text.startsWith("/generate ") || text.startsWith("/generate@seo_conductor_bot ")) {
+  } else if (text.startsWith("/generate ") || text.startsWith("/generate@slot_conductor_bot ")) {
     const customTopic = text.replace(/^\/generate(@\S+)?\s+/, "");
     await sendMessage(TOKEN, GROUP_ID,
-      `@seo_copywriter_bot TASK_ID:T${Date.now()} ACTION:write\nТема: ${customTopic}`);
+      `@slot_copywriter_bot TASK_ID:T${Date.now()} ACTION:write\nТема: ${customTopic}`);
     await sendMessage(TOKEN, chatId, `📝 Запрос на статью отправлен: "${customTopic}"`);
-  } else if (text === "/stop" || text === "/stop@seo_conductor_bot") {
+  } else if (text === "/stop" || text === "/stop@slot_conductor_bot") {
     await sendMessage(TOKEN, chatId, `🛑 Остановка по команде. Активные задачи завершат работу.`);
     process.exit(0);
   }

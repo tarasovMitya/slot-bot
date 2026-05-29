@@ -11,11 +11,11 @@ export async function startSearcher() {
 
   startPolling(TOKEN, async (msg: TgMessage) => {
     const text = msg.text ?? "";
-    if (!text.includes("@seo_searcher_bot")) return;
+    if (!text.includes("@slot_searcher_bot")) return;
 
     const taskId = text.match(/TASK_ID:(\S+)/)?.[1] ?? `T${Date.now()}`;
     const instruction = text
-      .replace(/@seo_searcher_bot\s*/i, "")
+      .replace(/@slot_searcher_bot\s*/i, "")
       .replace(/TASK_ID:\S+\s*/i, "")
       .replace(/ACTION:\w+\s*/i, "")
       .trim();

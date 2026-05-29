@@ -5,7 +5,7 @@ import { COPYWRITER_PROMPT } from "./shared/prompts.ts";
 
 const TOKEN = process.env.COPYWRITER_TOKEN!;
 const GROUP_ID = process.env.SEO_GROUP_ID!;
-const MY_USERNAME = "seo_copywriter_bot";
+const MY_USERNAME = "slot_copywriter_bot";
 
 function extractTaskId(text: string): string {
   const m = text.match(/TASK_ID:(\S+)/);
@@ -74,14 +74,14 @@ export async function startCopywriter() {
 
   startPolling(TOKEN, async (msg: TgMessage) => {
     const text = msg.text ?? "";
-    if (!text.includes(`@${MY_USERNAME}`) && !text.includes("@seo_copywriter_bot")) return;
+    if (!text.includes(`@${MY_USERNAME}`) && !text.includes("@slot_copywriter_bot")) return;
 
     const taskId = extractTaskId(text);
     const action = extractAction(text);
 
     // Remove the mention prefix to get the instruction
     const instruction = text
-      .replace(/@seo_copywriter_bot\s*/i, "")
+      .replace(/@slot_copywriter_bot\s*/i, "")
       .replace(/TASK_ID:\S+\s*/i, "")
       .replace(/ACTION:\w+\s*/i, "")
       .trim();

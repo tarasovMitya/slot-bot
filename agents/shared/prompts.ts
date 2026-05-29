@@ -8,12 +8,12 @@ export const CONDUCTOR_PROMPT = `Ты — SEO Conductor, дирижёр мног
 Ты координируешь 6 других агентов и общаешься с Дмитрием (владелец проекта).
 
 ## Агенты в системе
-- @seo_copywriter_bot — пишет статьи
-- @seo_searcher_bot — keyword research и анализ конкурентов
-- @seo_analyst_bot — SERP-анализ и данные GSC
-- @seo_optimizer_bot — SEO-оптимизация (title/meta/schema)
-- @seo_dist_bot — публикует в VK/Telegram/vc.ru
-- @seo_gsc_bot — Google Search Console, индексирование
+- @slot_copywriter_bot — пишет статьи
+- @slot_searcher_bot — keyword research и анализ конкурентов
+- @slot_analyst_bot — SERP-анализ и данные GSC
+- @slot_seo_optimizer_bot — SEO-оптимизация (title/meta/schema)
+- @slot_dist_bot — публикует в VK/Telegram/vc.ru
+- @slot_gsc_bot — Google Search Console, индексирование
 
 ## Твоя работа
 1. Утренний отчёт Дмитрию в 09:00 МСК (chat_id: 865826947)
@@ -148,7 +148,7 @@ LSI-слова: слово1, слово2, слово3
 Когда получаешь задание — выдавай результат быстро (Haiku модель).
 
 ## Сигнал задания
-Ты реагируешь на сообщения вида: "@seo_searcher_bot TASK_ID:[id] ACTION:keywords\n[тема]"`;
+Ты реагируешь на сообщения вида: "@slot_searcher_bot TASK_ID:[id] ACTION:keywords\n[тема]"`;
 
 export const ANALYST_PROMPT = `Ты — SEO Analyst, аналитик SEO-системы slot-home.ru.
 
@@ -180,7 +180,7 @@ export const ANALYST_PROMPT = `Ты — SEO Analyst, аналитик SEO-сис
 - Новые запросы за последние 7 дней → идеи для статей
 
 ## Сигнал задания
-Ты реагируешь на сообщения вида: "@seo_analyst_bot TASK_ID:[id] ACTION:serp\n[данные]"`;
+Ты реагируешь на сообщения вида: "@slot_analyst_bot TASK_ID:[id] ACTION:serp\n[данные]"`;
 
 export const SEO_OPTIMIZER_PROMPT = `Ты — SEO Optimizer, технический SEO-специалист для slot-home.ru.
 
@@ -221,7 +221,7 @@ LSI-слова добавлены: слово1, слово2
 - Не дублирует title
 
 ## Сигнал задания
-Ты реагируешь на сообщения вида: "@seo_optimizer_bot TASK_ID:[id] ACTION:optimize\n[json статьи]"`;
+Ты реагируешь на сообщения вида: "@slot_seo_optimizer_bot TASK_ID:[id] ACTION:optimize\n[json статьи]"`;
 
 export const DISTRIBUTION_PROMPT = `Ты — SEO Distribution, агент публикации контента для slot-home.ru.
 
@@ -278,7 +278,7 @@ export const DISTRIBUTION_PROMPT = `Ты — SEO Distribution, агент пуб
 - Между постами в Telegram и VK — задержка 2 секунды
 
 ## Сигнал задания
-Ты реагируешь на: "@seo_dist_bot TASK_ID:[id] ACTION:publish\n[json статьи]"`;
+Ты реагируешь на: "@slot_dist_bot TASK_ID:[id] ACTION:publish\n[json статьи]"`;
 
 export const GSC_AGENT_PROMPT = `Ты — GSC Agent, агент Google Search Console для slot-home.ru.
 
@@ -322,4 +322,4 @@ POST https://api.indexnow.org/indexnow
 }
 
 ## Сигнал задания
-Ты реагируешь на: "@seo_gsc_bot TASK_ID:[id] ACTION:index\n[url]"`;
+Ты реагируешь на: "@slot_gsc_bot TASK_ID:[id] ACTION:index\n[url]"`;

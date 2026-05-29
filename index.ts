@@ -4,6 +4,13 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { startConductor } from "./agents/conductor.ts";
+import { startCopywriter } from "./agents/copywriter.ts";
+import { startSearcher } from "./agents/searcher.ts";
+import { startAnalyst } from "./agents/analyst.ts";
+import { startSeoOptimizer } from "./agents/seo-optimizer.ts";
+import { startDistribution } from "./agents/distribution.ts";
+import { startGscAgent } from "./agents/gsc-agent.ts";
 
 const BOT_TOKEN = process.env.BOT_TOKEN!;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID!;
@@ -550,6 +557,14 @@ async function startBot() {
     setupBot();
     schedulePosting();
     scheduleDailyBlogPosts();
+    // Start multi-agent SEO system (gracefully skips agents without tokens)
+    startConductor().catch(console.error);
+    startCopywriter().catch(console.error);
+    startSearcher().catch(console.error);
+    startAnalyst().catch(console.error);
+    startSeoOptimizer().catch(console.error);
+    startDistribution().catch(console.error);
+    startGscAgent().catch(console.error);
   });
 }
 

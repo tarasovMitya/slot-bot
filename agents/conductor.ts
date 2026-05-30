@@ -165,5 +165,13 @@ export async function startConductor() {
   }, 60_000);
 
   console.log("[conductor] starting grammy polling...");
-  bot.start({ onStart: () => console.log("[conductor] polling active ✅") });
+  // Send startup ping to group to verify the bot is alive
+  if (GROUP_ID) {
+    sendMessage(TOKEN, GROUP_ID, "🤖 Conductor online — polling started").catch(e =>
+      console.error("[conductor] startup ping failed:", e)
+    );
+  }
+  bot.start({ onStart: () => console.log("[conductor] polling active ✅") }).catch(e =>
+    console.error("[conductor] bot.start error:", e)
+  );
 }

@@ -1,18 +1,18 @@
 // Conductor — orchestrates all SEO agents, reports to Dmitry
-import { callHaiku, callSonnet } from "./shared/claude.ts";
-import { startPolling, sendMessage, sendLong } from "./shared/telegram.ts";
-import type { TgMessage } from "./shared/telegram.ts";
+import { Bot } from "grammy";
+import { callHaiku } from "./shared/claude.ts";
+import { sendMessage, sendLong } from "./shared/telegram.ts";
 import { CONDUCTOR_PROMPT } from "./shared/prompts.ts";
-import { TOPIC_POOL, getAvailableTopics, topicToSlug } from "./topics.ts";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { TOPIC_POOL, getAvailableTopics } from "./topics.ts";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const TOKEN = process.env.CONDUCTOR_TOKEN!;
 const GROUP_ID = process.env.SEO_GROUP_ID!;
-const CHANNEL_ID = process.env.SEO_CHANNEL_ID!;
 const DMITRY_ID = process.env.DMITRY_CHAT_ID || "865826947";
+
+const __dir = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = join(__dir, "../conductor-state.json");
 
 interface ConductorState {
@@ -33,33 +33,27 @@ interface PendingApproval {
 
 function loadState(): ConductorState {
   if (existsSync(STATE_FILE)) {
-    return JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    try { return JSON.parse(readFileSync(STATE_FILE, "utf-8")); } catch {}
   }
-  return {
-    lastReportDate: null,
-    lastArticleDate: null,
-    pendingApprovals: [],
-    articlesThisMonth: 0,
-    budgetUsed: 0,
-  };
+  return { lastReportDate: null, lastArticleDate: null, pendingApprovals: [], articlesThisMonth: 0, budgetUsed: 0 };
 }
 
 function saveState(state: ConductorState) {
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  try { writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)); } catch {}
 }
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Get next topic not yet published
-function getNextTopic(): typeof TOPIC_POOL[0] | null {
+function getNextTopic() {
   const articlesFile = join(__dir, "../articles.json");
   if (!existsSync(articlesFile)) return TOPIC_POOL[0];
-  const articles = JSON.parse(readFileSync(articlesFile, "utf-8")) as Array<{ slug: string }>;
-  const existingSlugs = new Set(articles.map(a => a.slug));
-  const available = getAvailableTopics(existingSlugs);
-  return available[0] ?? null;
+  try {
+    const articles = JSON.parse(readFileSync(articlesFile, "utf-8")) as Array<{ slug: string }>;
+    const available = getAvailableTopics(new Set(articles.map(a => a.slug)));
+    return available[0] ?? null;
+  } catch { return TOPIC_POOL[0]; }
 }
 
 async function sendMorningReport(state: ConductorState) {
@@ -67,12 +61,9 @@ async function sendMorningReport(state: ConductorState) {
   const report = `📊 SEO OS — утро ${today()}
 
 ✅ Опубликовано в этом месяце: ${state.articlesThisMonth}
-📝 В очереди на апрув: ${state.pendingApprovals.length}
-🎯 План на сегодня:
-• Написать статью: "${topic?.title ?? "тема не найдена"}"
-• SERP-аудит топ ключей
+📝 На апруве: ${state.pendingApprovals.length}
+🎯 Сегодня: "${topic?.title ?? "пул пуст"}"
 💰 Бюджет: $${state.budgetUsed.toFixed(2)} / $5.00`;
-
   await sendMessage(TOKEN, DMITRY_ID, report);
   state.lastReportDate = today();
   saveState(state);
@@ -80,158 +71,99 @@ async function sendMorningReport(state: ConductorState) {
 
 async function requestArticle(topic: typeof TOPIC_POOL[0]) {
   const taskId = `T${Date.now()}`;
-  const msg = `@slot_copywriter_bot TASK_ID:${taskId} ACTION:write
-Тема: ${topic.title}
-Ключ: ${topic.keyword}
-Категория: ${topic.category}
-categorySlug: ${topic.categorySlug}
-Intent: ${topic.intent}`;
-  await sendMessage(TOKEN, GROUP_ID, msg);
+  await sendMessage(TOKEN, GROUP_ID,
+    `@slot_copywriter_bot TASK_ID:${taskId} ACTION:write\nТема: ${topic.title}\nКлюч: ${topic.keyword}\nКатегория: ${topic.category}\ncategorySlug: ${topic.categorySlug}`);
   return taskId;
-}
-
-async function handleApproval(msg: TgMessage, state: ConductorState) {
-  const text = msg.text ?? "";
-  const approveMatch = text.match(/\[Approve\]\s*([a-z0-9-]+)/i);
-  const rejectMatch = text.match(/\[Reject\]\s*([a-z0-9-]+)/i);
-  const editMatch = text.match(/\[Edit:\s*(.+?)\]\s*([a-z0-9-]+)/is);
-
-  if (approveMatch) {
-    const slug = approveMatch[1];
-    const pending = state.pendingApprovals.find(p => p.slug === slug);
-    if (!pending) {
-      await sendMessage(TOKEN, DMITRY_ID, `❓ Не найдена статья с slug: ${slug}`);
-      return;
-    }
-    // Send publish task
-    const taskId = `P${Date.now()}`;
-    await sendMessage(TOKEN, GROUP_ID,
-      `@slot_distrib_bot TASK_ID:${taskId} ACTION:publish\n${pending.json}`);
-    state.pendingApprovals = state.pendingApprovals.filter(p => p.slug !== slug);
-    state.articlesThisMonth++;
-    state.budgetUsed += 0.05;
-    saveState(state);
-    await sendMessage(TOKEN, DMITRY_ID, `✅ Статья "${pending.title}" отправлена на публикацию.`);
-  } else if (rejectMatch) {
-    const slug = rejectMatch[1];
-    state.pendingApprovals = state.pendingApprovals.filter(p => p.slug !== slug);
-    saveState(state);
-    await sendMessage(TOKEN, DMITRY_ID, `🗑 Статья ${slug} отклонена и удалена из очереди.`);
-  } else if (editMatch) {
-    const feedback = editMatch[1];
-    const slug = editMatch[2];
-    const pending = state.pendingApprovals.find(p => p.slug === slug);
-    if (pending) {
-      const taskId = `E${Date.now()}`;
-      await sendMessage(TOKEN, GROUP_ID,
-        `@slot_copywriter_bot TASK_ID:${taskId} ACTION:edit\nSlug: ${slug}\nПравки: ${feedback}\n${pending.json}`);
-    }
-  }
-}
-
-async function handleCommand(text: string, chatId: number, state: ConductorState) {
-  if (text === "/report" || text === "/report@slot_conductor_bot") {
-    await sendMorningReport(state);
-  } else if (text === "/status" || text === "/status@slot_conductor_bot") {
-    const topic = getNextTopic();
-    await sendMessage(TOKEN, chatId,
-      `🤖 SEO OS Status\n\n` +
-      `Агентов активно: 7\n` +
-      `Статей в очереди: ${state.pendingApprovals.length}\n` +
-      `Следующая тема: ${topic?.title ?? "пул пуст"}\n` +
-      `Бюджет: $${state.budgetUsed.toFixed(2)} / $5.00`);
-  } else if (text.startsWith("/generate ") || text.startsWith("/generate@slot_conductor_bot ")) {
-    const customTopic = text.replace(/^\/generate(@\S+)?\s+/, "");
-    await sendMessage(TOKEN, GROUP_ID,
-      `@slot_copywriter_bot TASK_ID:T${Date.now()} ACTION:write\nТема: ${customTopic}`);
-    await sendMessage(TOKEN, chatId, `📝 Запрос на статью отправлен: "${customTopic}"`);
-  } else if (text === "/stop" || text === "/stop@slot_conductor_bot") {
-    await sendMessage(TOKEN, chatId, `🛑 Остановка по команде. Активные задачи завершат работу.`);
-    process.exit(0);
-  }
-}
-
-// Receive article from copywriter (JSON in group message from copywriter bot)
-async function handleGroupMessage(msg: TgMessage, state: ConductorState) {
-  const text = msg.text ?? "";
-
-  // Article JSON delivered by copywriter
-  if (text.startsWith("ARTICLE_READY TASK_ID:")) {
-    const jsonStart = text.indexOf("\n{");
-    if (jsonStart === -1) return;
-    const jsonStr = text.slice(jsonStart + 1);
-    try {
-      const article = JSON.parse(jsonStr);
-      const preview = `📝 Статья готова к апруву\n\nТема: ${article.title}\nSlug: ${article.slug}\nКатегория: ${article.category}\nВремя чтения: ${article.readTime} мин\n\n— — — превью — — —\n${article.sections.find((s: {type:string;text?:string}) => s.type === "p")?.text ?? ""}\n— — — — — — — — —\n\n[Approve] ${article.slug}\n[Reject] ${article.slug}\n[Edit: правки] ${article.slug}`;
-
-      state.pendingApprovals.push({
-        taskId: `T${Date.now()}`,
-        slug: article.slug,
-        title: article.title,
-        json: jsonStr,
-        requestedAt: new Date().toISOString(),
-      });
-      saveState(state);
-      await sendLong(TOKEN, DMITRY_ID, preview);
-    } catch (e) {
-      console.error("[conductor] failed to parse article JSON:", e);
-    }
-  }
 }
 
 export async function startConductor() {
   if (!TOKEN) { console.warn("[conductor] CONDUCTOR_TOKEN not set, skipping"); return; }
 
+  console.log("[conductor] initializing grammy bot...");
   const state = loadState();
+  const bot = new Bot(TOKEN);
 
-  // Daily schedule check every minute
+  bot.command("start", async (ctx) => {
+    await ctx.reply(`🤖 SEO Conductor online\n\nТвой ID: ${ctx.from?.id}\n\n/status — статус\n/report — отчёт\n/generate [тема] — статья`);
+  });
+
+  bot.command("status", async (ctx) => {
+    const topic = getNextTopic();
+    await ctx.reply(`🤖 SEO OS Status\n\nСтатей в очереди: ${state.pendingApprovals.length}\nСледующая тема: ${topic?.title ?? "пул пуст"}\nБюджет: $${state.budgetUsed.toFixed(2)} / $5.00`);
+  });
+
+  bot.command("report", async (ctx) => {
+    await sendMorningReport(state);
+    await ctx.reply("📊 Отчёт отправлен");
+  });
+
+  bot.command("stop", async (ctx) => {
+    await ctx.reply("🛑 Остановка...");
+    process.exit(0);
+  });
+
+  bot.on("message:text", async (ctx) => {
+    const text = ctx.message.text;
+    const isGroup = ctx.chat.type === "group" || ctx.chat.type === "supergroup";
+
+    if (isGroup) {
+      // Handle article delivery from copywriter
+      if (text.startsWith("ARTICLE_READY TASK_ID:")) {
+        const jsonStart = text.indexOf("\n{");
+        if (jsonStart === -1) return;
+        try {
+          const article = JSON.parse(text.slice(jsonStart + 1));
+          const preview = `📝 Статья на апрув\n\nТема: ${article.title}\nSlug: ${article.slug}\nКатегория: ${article.category}\nЧтение: ${article.readTime} мин\n\n— превью —\n${article.sections?.find((s: {type:string;text?:string}) => s.type === "p")?.text ?? ""}\n— — —\n\n[Approve] ${article.slug}\n[Reject] ${article.slug}`;
+          state.pendingApprovals.push({ taskId: `T${Date.now()}`, slug: article.slug, title: article.title, json: text.slice(jsonStart + 1), requestedAt: new Date().toISOString() });
+          saveState(state);
+          await sendLong(TOKEN, DMITRY_ID, preview);
+        } catch (e) { console.error("[conductor] article parse error:", e); }
+      }
+      return;
+    }
+
+    // Private chat — handle approvals and questions
+    if (text.includes("[Approve]")) {
+      const slug = text.match(/\[Approve\]\s*([a-z0-9-]+)/i)?.[1];
+      const pending = state.pendingApprovals.find(p => p.slug === slug);
+      if (pending) {
+        await sendMessage(TOKEN, GROUP_ID, `@slot_distrib_bot TASK_ID:P${Date.now()} ACTION:publish\n${pending.json}`);
+        state.pendingApprovals = state.pendingApprovals.filter(p => p.slug !== slug);
+        state.articlesThisMonth++;
+        state.budgetUsed += 0.05;
+        saveState(state);
+        await ctx.reply(`✅ Статья "${pending.title}" отправлена на публикацию`);
+      }
+    } else if (text.includes("[Reject]")) {
+      const slug = text.match(/\[Reject\]\s*([a-z0-9-]+)/i)?.[1];
+      state.pendingApprovals = state.pendingApprovals.filter(p => p.slug !== slug);
+      saveState(state);
+      await ctx.reply(`🗑 Статья ${slug} отклонена`);
+    } else if (!text.startsWith("/")) {
+      try {
+        const reply = await callHaiku(CONDUCTOR_PROMPT, text);
+        await ctx.reply(reply);
+      } catch (e) { await ctx.reply(`❌ Ошибка Claude API: ${e}`); }
+    }
+  });
+
+  // Daily schedule
   setInterval(async () => {
     const now = new Date();
-    const h = now.getUTCHours();
-    const m = now.getUTCMinutes();
-
-    // 06:00 UTC = 09:00 MSK — morning report
+    const h = now.getUTCHours(), m = now.getUTCMinutes();
     if (h === 6 && m === 0 && state.lastReportDate !== today()) {
       await sendMorningReport(state).catch(console.error);
     }
-
-    // 07:30 UTC = 10:30 MSK — request new article
-    if (h === 7 && m === 30 && state.lastArticleDate !== today()) {
-      if (state.budgetUsed < 4.50) {
-        const topic = getNextTopic();
-        if (topic) {
-          await requestArticle(topic).catch(console.error);
-          state.lastArticleDate = today();
-          saveState(state);
-        }
+    if (h === 7 && m === 30 && state.lastArticleDate !== today() && state.budgetUsed < 4.50) {
+      const topic = getNextTopic();
+      if (topic) {
+        await requestArticle(topic).catch(console.error);
+        state.lastArticleDate = today();
+        saveState(state);
       }
     }
   }, 60_000);
 
-  console.log(`[conductor] starting, GROUP_ID=${GROUP_ID}, DMITRY=${DMITRY_ID}`);
-
-  startPolling(TOKEN, async (msg: TgMessage) => {
-    const text = msg.text ?? "";
-    const chatType = msg.chat.type;
-    const isPrivate = chatType === "private";
-    const fromId = msg.from?.id;
-
-    console.log(`[conductor] msg from=${fromId} chat=${msg.chat.id} type=${chatType} text=${text.slice(0,50)}`);
-
-    if (isPrivate) {
-      if (text === "/start") {
-        await sendMessage(TOKEN, msg.chat.id,
-          `🤖 SEO Conductor online\n\nТвой ID: ${fromId}\n\nКоманды:\n/status — статус системы\n/report — утренний отчёт\n/generate [тема] — написать статью`);
-      } else if (text.startsWith("/")) {
-        await handleCommand(text, msg.chat.id, state);
-      } else if (text.includes("[Approve]") || text.includes("[Reject]") || text.includes("[Edit:")) {
-        await handleApproval(msg, state);
-      } else {
-        const reply = await callHaiku(CONDUCTOR_PROMPT, text);
-        await sendMessage(TOKEN, msg.chat.id, reply);
-      }
-    } else if (chatType === "group" || chatType === "supergroup") {
-      await handleGroupMessage(msg, state);
-    }
-  }, "conductor");
+  console.log("[conductor] starting grammy polling...");
+  bot.start({ onStart: () => console.log("[conductor] polling active ✅") });
 }

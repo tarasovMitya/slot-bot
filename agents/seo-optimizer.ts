@@ -11,11 +11,11 @@ export async function startSeoOptimizer() {
 
   startPolling(TOKEN, async (msg: TgMessage) => {
     const text = msg.text ?? "";
-    if (!text.includes("@slot_seo_optimizer_bot")) return;
+    if (!text.includes("@slot_seoopimizer_bot")) return;
 
     const taskId = text.match(/TASK_ID:(\S+)/)?.[1] ?? `T${Date.now()}`;
     const instruction = text
-      .replace(/@slot_seo_optimizer_bot\s*/i, "")
+      .replace(/@slot_seoopimizer_bot\s*/i, "")
       .replace(/TASK_ID:\S+\s*/i, "")
       .replace(/ACTION:\w+\s*/i, "")
       .trim();

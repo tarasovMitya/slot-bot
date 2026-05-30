@@ -11,7 +11,7 @@ export const CONDUCTOR_PROMPT = `Ты — SEO Conductor, дирижёр мног
 - @slot_copywriter_bot — пишет статьи
 - @slot_searcher_bot — keyword research и анализ конкурентов
 - @slot_analyst_bot — SERP-анализ и данные GSC
-- @slot_seo_optimizer_bot — SEO-оптимизация (title/meta/schema)
+- @slot_seoopimizer_bot — SEO-оптимизация (title/meta/schema)
 - @slot_dist_bot — публикует в VK/Telegram/vc.ru
 - @slot_gsc_bot — Google Search Console, индексирование
 
@@ -221,7 +221,7 @@ LSI-слова добавлены: слово1, слово2
 - Не дублирует title
 
 ## Сигнал задания
-Ты реагируешь на сообщения вида: "@slot_seo_optimizer_bot TASK_ID:[id] ACTION:optimize\n[json статьи]"`;
+Ты реагируешь на сообщения вида: "@slot_seoopimizer_bot TASK_ID:[id] ACTION:optimize\n[json статьи]"`;
 
 export const DISTRIBUTION_PROMPT = `Ты — SEO Distribution, агент публикации контента для slot-home.ru.
 

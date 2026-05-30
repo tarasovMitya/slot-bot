@@ -208,20 +208,25 @@ export async function startConductor() {
     }
   }, 60_000);
 
+  console.log(`[conductor] starting, GROUP_ID=${GROUP_ID}, DMITRY=${DMITRY_ID}`);
+
   startPolling(TOKEN, async (msg: TgMessage) => {
     const text = msg.text ?? "";
     const chatType = msg.chat.type;
     const isPrivate = chatType === "private";
-    const isFromDmitry = msg.from?.id === Number(DMITRY_ID);
+    const fromId = msg.from?.id;
 
-    if (isPrivate && isFromDmitry) {
-      // Commands and approvals from Dmitry
-      if (text.startsWith("/")) {
+    console.log(`[conductor] msg from=${fromId} chat=${msg.chat.id} type=${chatType} text=${text.slice(0,50)}`);
+
+    if (isPrivate) {
+      if (text === "/start") {
+        await sendMessage(TOKEN, msg.chat.id,
+          `🤖 SEO Conductor online\n\nТвой ID: ${fromId}\n\nКоманды:\n/status — статус системы\n/report — утренний отчёт\n/generate [тема] — написать статью`);
+      } else if (text.startsWith("/")) {
         await handleCommand(text, msg.chat.id, state);
       } else if (text.includes("[Approve]") || text.includes("[Reject]") || text.includes("[Edit:")) {
         await handleApproval(msg, state);
       } else {
-        // General question — pass to Claude
         const reply = await callHaiku(CONDUCTOR_PROMPT, text);
         await sendMessage(TOKEN, msg.chat.id, reply);
       }

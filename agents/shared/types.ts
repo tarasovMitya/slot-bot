@@ -52,6 +52,6 @@ export const AGENT_MENTIONS: Record<AgentName, string> = {
   searcher: "@slot_searcher_bot",
   analyst: "@slot_analyst_bot",
   "seo-optimizer": "@slot_seoopimizer_bot",
-  distribution: "@slot_dist_bot",
+  distribution: "@slot_distrib_bot",
   "gsc-agent": "@slot_gsc_bot",
 };

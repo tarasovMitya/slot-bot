@@ -105,7 +105,7 @@ async function handleApproval(msg: TgMessage, state: ConductorState) {
     // Send publish task
     const taskId = `P${Date.now()}`;
     await sendMessage(TOKEN, GROUP_ID,
-      `@slot_dist_bot TASK_ID:${taskId} ACTION:publish\n${pending.json}`);
+      `@slot_distrib_bot TASK_ID:${taskId} ACTION:publish\n${pending.json}`);
     state.pendingApprovals = state.pendingApprovals.filter(p => p.slug !== slug);
     state.articlesThisMonth++;
     state.budgetUsed += 0.05;

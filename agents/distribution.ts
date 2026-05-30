@@ -116,7 +116,7 @@ export async function startDistribution() {
 
   startPolling(TOKEN, async (msg: TgMessage) => {
     const text = msg.text ?? "";
-    if (!text.includes("@slot_dist_bot")) return;
+    if (!text.includes("@slot_distrib_bot")) return;
 
     const taskId = text.match(/TASK_ID:(\S+)/)?.[1] ?? `T${Date.now()}`;
     const jsonStart = text.indexOf("\n{");

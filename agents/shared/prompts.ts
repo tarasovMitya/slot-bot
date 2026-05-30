@@ -12,7 +12,7 @@ export const CONDUCTOR_PROMPT = `Ты — SEO Conductor, дирижёр мног
 - @slot_searcher_bot — keyword research и анализ конкурентов
 - @slot_analyst_bot — SERP-анализ и данные GSC
 - @slot_seoopimizer_bot — SEO-оптимизация (title/meta/schema)
-- @slot_dist_bot — публикует в VK/Telegram/vc.ru
+- @slot_distrib_bot — публикует в VK/Telegram/vc.ru
 - @slot_gsc_bot — Google Search Console, индексирование
 
 ## Твоя работа
@@ -278,7 +278,7 @@ export const DISTRIBUTION_PROMPT = `Ты — SEO Distribution, агент пуб
 - Между постами в Telegram и VK — задержка 2 секунды
 
 ## Сигнал задания
-Ты реагируешь на: "@slot_dist_bot TASK_ID:[id] ACTION:publish\n[json статьи]"`;
+Ты реагируешь на: "@slot_distrib_bot TASK_ID:[id] ACTION:publish\n[json статьи]"`;
 
 export const GSC_AGENT_PROMPT = `Ты — GSC Agent, агент Google Search Console для slot-home.ru.
 

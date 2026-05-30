@@ -1,6 +1,7 @@
 // Conductor — orchestrates all SEO agents, reports to Dmitry
 import { callHaiku, callSonnet } from "./shared/claude.ts";
-import { startPolling, sendMessage, sendLong, TgMessage } from "./shared/telegram.ts";
+import { startPolling, sendMessage, sendLong } from "./shared/telegram.ts";
+import type { TgMessage } from "./shared/telegram.ts";
 import { CONDUCTOR_PROMPT } from "./shared/prompts.ts";
 import { TOPIC_POOL, getAvailableTopics, topicToSlug } from "./topics.ts";
 import { readFileSync, writeFileSync, existsSync } from "fs";

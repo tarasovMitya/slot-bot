@@ -1,5 +1,6 @@
 // Distribution — publishes approved content to Telegram/VK/vc.ru
-import { startPolling, sendMessage, TgMessage } from "./shared/telegram.ts";
+import { startPolling, sendMessage } from "./shared/telegram.ts";
+import type { TgMessage } from "./shared/telegram.ts";
 import { DISTRIBUTION_PROMPT } from "./shared/prompts.ts";
 import { postToVk } from "../vk.ts";
 

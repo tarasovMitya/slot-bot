@@ -1,6 +1,7 @@
 // Copywriter — generates full article JSON using Claude Sonnet
 import { callSonnet } from "./shared/claude.ts";
-import { startPolling, sendMessage, sendLong, TgMessage } from "./shared/telegram.ts";
+import { startPolling, sendMessage, sendLong } from "./shared/telegram.ts";
+import type { TgMessage } from "./shared/telegram.ts";
 import { COPYWRITER_PROMPT } from "./shared/prompts.ts";
 
 const TOKEN = process.env.COPYWRITER_TOKEN!;

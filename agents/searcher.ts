@@ -1,6 +1,7 @@
 // Searcher — keyword research and competitor analysis
 import { callHaiku } from "./shared/claude.ts";
-import { startPolling, sendMessage, TgMessage } from "./shared/telegram.ts";
+import { startPolling, sendMessage } from "./shared/telegram.ts";
+import type { TgMessage } from "./shared/telegram.ts";
 import { SEARCHER_PROMPT } from "./shared/prompts.ts";
 
 const TOKEN = process.env.SEARCHER_TOKEN!;

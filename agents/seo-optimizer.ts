@@ -1,6 +1,7 @@
 // SEO Optimizer — title/meta/schema optimization
 import { callHaiku } from "./shared/claude.ts";
-import { startPolling, sendMessage, TgMessage } from "./shared/telegram.ts";
+import { startPolling, sendMessage } from "./shared/telegram.ts";
+import type { TgMessage } from "./shared/telegram.ts";
 import { SEO_OPTIMIZER_PROMPT } from "./shared/prompts.ts";
 
 const TOKEN = process.env.SEO_OPTIMIZER_TOKEN!;
